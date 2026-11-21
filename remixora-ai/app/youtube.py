@@ -63,5 +63,5 @@ def safe_download_error(error):
     if 'duration limit' in message:return 'This video exceeds the configured duration limit. Upload a shorter source.'
     if 'size limit' in message or 'filesize' in message:return 'This download exceeds the configured media size limit. Upload a smaller source.'
     if any(x in message for x in ['sign in','bot','403','429','private','unavailable','age','members','premium']):
-        return 'YouTube restricted this video or request. Use a publicly accessible video you may repurpose, or upload your original file. No cookies or access bypass are used.'
-    return 'YouTube could not provide this media. Check connectivity, update yt-dlp, or upload your original file.'
+        return f'YouTube restricted this video or request ({str(error)[:140]}). Use a publicly accessible video you may repurpose, or upload your original file. No cookies or access bypass are used.'
+    return f'YouTube could not provide this media: {str(error)[:140]}'

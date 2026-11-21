@@ -21,9 +21,10 @@ def run(url,folder,language):
         total=sum(p.stat().st_size for p in folder.iterdir() if p.is_file())
         if total>limit*2.1:raise ValueError('size limit')
     opts={'quiet':True,'logger':Quiet(),'noplaylist':True,'cachedir':False,'socket_timeout':20,'retries':1,'fragment_retries':1,
-          'js_runtimes':{'node':{}},'remote_components':set(),'allowed_extractors':['youtube'],'restrictfilenames':True,
+          'allowed_extractors':['youtube'],'restrictfilenames':True,
+          'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'mweb', 'web']}},
           'max_filesize':limit,'concurrent_fragment_downloads':1,'progress_hooks':[progress],
-          'outtmpl':str(folder/'source.%(ext)s'),'format':'bv[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]/b[height<=720]',
+          'outtmpl':str(folder/'source.%(ext)s'),'format':'b[height<=720]/bv[height<=720]+ba/b',
           'merge_output_format':'mp4','overwrites':True,'continuedl':False}
     with YoutubeDL(opts) as ydl:
         info=ydl.extract_info(url,download=False)
