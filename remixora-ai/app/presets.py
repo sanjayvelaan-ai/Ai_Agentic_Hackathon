@@ -336,7 +336,8 @@ def process_render(job):
         item=dict(c.execute('SELECT * FROM preset_candidates WHERE id=?',(job['target_id'],)).fetchone());clip=main.get(c,'clips',item['clip_id']);asset=main.get(c,'assets',clip['asset_id']);run=dict(c.execute('SELECT * FROM preset_runs WHERE id=?',(item['run_id'],)).fetchone());segments=rows(c.execute('SELECT * FROM segments WHERE asset_id=? ORDER BY start',(asset['id'],)))
         if item['render_status']=='rendered' and item['output_path'] and Path(item['output_path']).is_file():return
         c.execute("UPDATE preset_candidates SET render_status='rendering',error=NULL WHERE id=?",(item['id'],))
-    if main.directory_size(DATA_DIR)>int(os.getenv('STORAGE_QUOTA_MB','5000'))*1024**2 or shutil.disk_usage(DATA_DIR).free<300*1024**2:raise ValueError('Free disk space before rendering.')
+    min_render_free = min(int(os.getenv('MIN_FREE_MB', '30')) * 1024**2, 30 * 1024**2)
+    if main.directory_size(DATA_DIR)>int(os.getenv('STORAGE_QUOTA_MB','5000'))*1024**2 or shutil.disk_usage(DATA_DIR).free<min_render_free:raise ValueError('Free disk space before rendering.')
     config=PresetConfig.model_validate_json(run['config_json']);edl=json.loads(item['edl_json']);audio_edl=edl and asset['media_kind']=='audio';dest=main.EXPORTS/(clip['id']+('.m4a' if audio_edl else '.mp4'))
     if edl:render_edl(asset['media_path'],dest,edl,asset['media_kind']=='video',config.aspect_ratio,segments,config.burn_subtitles and bool(segments))
     else:render_variant(asset['media_path'],dest,clip['start'],clip['end'],asset['media_kind']=='video','',REGISTRY[config.preset_id].name,segments,config.burn_subtitles and bool(segments),config.aspect_ratio)

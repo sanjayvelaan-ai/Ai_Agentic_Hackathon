@@ -54,7 +54,8 @@ def import_youtube(req:YouTubeRequest):
     from .media import ensure_ffmpeg
     ensure_ffmpeg()
     if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):raise HTTPException(503,'FFmpeg and FFprobe are required on the server.')
-    if shutil.disk_usage(DATA_DIR).free<int(os.getenv('MAX_UPLOAD_MB','150'))*1024**2*4:raise HTTPException(507,'Free disk space before importing a video.')
+    min_free = min(int(os.getenv('MAX_UPLOAD_MB', '50')) * 1024**2, 50 * 1024**2)
+    if shutil.disk_usage(DATA_DIR).free < min_free:raise HTTPException(507,'Free disk space before importing a video.')
     return create_workflow(WorkflowOptions(**req.model_dump()),url=url)
 
 

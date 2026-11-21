@@ -277,7 +277,7 @@ def ingest(media:UploadFile=File(...),transcript:UploadFile|None=File(default=No
     text=read_subtitle(transcript) if transcript else None
     limit=int(os.getenv('MAX_UPLOAD_MB','150'))*1024*1024
     used=directory_size(UPLOADS)
-    if used+limit>int(os.getenv('STORAGE_QUOTA_MB','5000'))*1024*1024 or shutil.disk_usage(DATA_DIR).free<limit*2:raise HTTPException(507,'Insufficient media storage; free space before uploading')
+    if used+limit>int(os.getenv('STORAGE_QUOTA_MB','5000'))*1024*1024 or shutil.disk_usage(DATA_DIR).free<min(limit, 30*1024*1024):raise HTTPException(507,'Insufficient media storage; free space before uploading')
     asset_id=uid();dest=UPLOADS/(asset_id+ext);received=0;digest=hashlib.sha256()
     try:
         with dest.open('wb') as fp:
