@@ -6,6 +6,11 @@
       "destination": "/api/index.py?__path=$1"
     }
   ],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60
+    }
+  },
   "env": {
     "AI_PROVIDER": "gemini",
     "GEMINI_MODEL": "gemini-1.5-flash",
@@ -13,5 +18,3 @@
     "MAX_UPLOAD_MB": "50"
   }
 }
-
-

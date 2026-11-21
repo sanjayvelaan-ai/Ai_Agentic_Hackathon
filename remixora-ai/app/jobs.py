@@ -22,37 +22,43 @@ class DurableWorker:
                 else:
                     c.execute("UPDATE preset_candidates SET render_status=?,error=? WHERE id=? AND render_status!='rendered'",(status,error,row['target_id']))
         self.stop.clear()
-        self.thread=threading.Thread(target=self.run,daemon=True,name='remixora-media-worker')
-        self.thread.start()
+        if not self.thread or not self.thread.is_alive():
+            self.thread=threading.Thread(target=self.run,daemon=True,name='remixora-media-worker')
+            self.thread.start()
 
     def close(self):
         self.stop.set()
-        if self.thread:self.thread.join(timeout=610)
+        if self.thread and self.thread.is_alive():self.thread.join(timeout=2)
+
+    def step(self):
+        with db() as c:
+            c.execute('BEGIN IMMEDIATE')
+            row=c.execute("SELECT * FROM jobs WHERE status='queued' ORDER BY created_at,rowid LIMIT 1").fetchone()
+            if row:
+                c.execute("UPDATE jobs SET status='running',attempts=attempts+1,error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?",(row['id'],))
+        if not row:
+            return False
+        try:
+            self.handler(dict(row),json.loads(row['payload']))
+            with db() as c:c.execute("UPDATE jobs SET status='completed',updated_at=CURRENT_TIMESTAMP WHERE id=?",(row['id'],))
+        except Exception as ex:
+            # Do not store subprocess command lines, API keys or transcript text.
+            message=str(ex)[:240] if isinstance(ex,ValueError) else 'Processing failed. Check local tools and retry; '+type(ex).__name__
+            with db() as c:
+                c.execute("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(message,row['id']))
+                if row['kind']=='preset_analyze':c.execute("UPDATE preset_runs SET status='failed',error=? WHERE id=?",(message,row['target_id']))
+                elif row['kind']=='preset_render':c.execute("UPDATE preset_candidates SET render_status='failed',error=? WHERE id=?",(message,row['target_id']))
+                elif row['kind']=='ingest':c.execute("UPDATE assets SET status='failed',error=? WHERE id=?",(message,row['target_id']))
+                elif row['kind']=='variant':c.execute("UPDATE variants SET status='failed',error=? WHERE id=?",(message,row['target_id']))
+                elif row['kind']=='render':c.execute("UPDATE clips SET render_status='failed' WHERE id=?",(row['target_id'],))
+                elif row['kind']=='workflow':c.execute("UPDATE workflows SET stage='failed',error=?,message='Fix the issue and retry this workflow',updated_at=CURRENT_TIMESTAMP WHERE id=?",(message,row['target_id']))
+        return True
 
     def run(self):
         while not self.stop.is_set():
-            with db() as c:
-                c.execute('BEGIN IMMEDIATE')
-                row=c.execute("SELECT * FROM jobs WHERE status='queued' ORDER BY created_at,rowid LIMIT 1").fetchone()
-                if row:
-                    c.execute("UPDATE jobs SET status='running',attempts=attempts+1,error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?",(row['id'],))
-            if not row:
+            processed = self.step()
+            if not processed:
                 self.stop.wait(.3)
-                continue
-            try:
-                self.handler(dict(row),json.loads(row['payload']))
-                with db() as c:c.execute("UPDATE jobs SET status='completed',updated_at=CURRENT_TIMESTAMP WHERE id=?",(row['id'],))
-            except Exception as ex:
-                # Do not store subprocess command lines, API keys or transcript text.
-                message=str(ex)[:240] if isinstance(ex,ValueError) else 'Processing failed. Check local tools and retry; '+type(ex).__name__
-                with db() as c:
-                    c.execute("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(message,row['id']))
-                    if row['kind']=='preset_analyze':c.execute("UPDATE preset_runs SET status='failed',error=? WHERE id=?",(message,row['target_id']))
-                    elif row['kind']=='preset_render':c.execute("UPDATE preset_candidates SET render_status='failed',error=? WHERE id=?",(message,row['target_id']))
-                    elif row['kind']=='ingest':c.execute("UPDATE assets SET status='failed',error=? WHERE id=?",(message,row['target_id']))
-                    elif row['kind']=='variant':c.execute("UPDATE variants SET status='failed',error=? WHERE id=?",(message,row['target_id']))
-                    elif row['kind']=='render':c.execute("UPDATE clips SET render_status='failed' WHERE id=?",(row['target_id'],))
-                    elif row['kind']=='workflow':c.execute("UPDATE workflows SET stage='failed',error=?,message='Fix the issue and retry this workflow',updated_at=CURRENT_TIMESTAMP WHERE id=?",(message,row['target_id']))
 
 def enqueue(kind,target_id,payload=None,connection=None):
     if connection is None:

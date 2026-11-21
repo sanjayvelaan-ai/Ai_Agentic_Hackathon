@@ -48,10 +48,13 @@ def json3_segments(data,duration):
 def download_youtube(url,folder,language='en'):
     url=canonical_youtube_url(url);folder=Path(folder).resolve();folder.mkdir(parents=True,exist_ok=True)
     try:
-        result=subprocess.run([sys.executable,'-m','app.youtube_worker',url,str(folder),language],capture_output=True,text=True,timeout=600)
-    except subprocess.TimeoutExpired:raise ValueError('YouTube import timed out. Try again or upload your original file.')
-    if result.returncode or not (folder/'result.json').is_file():
-        if (folder/'error.json').is_file():raise ValueError(json.loads((folder/'error.json').read_text())['error'])
+        from .youtube_worker import run as run_worker
+        run_worker(url, folder, language)
+    except Exception as ex:
+        err_msg = safe_download_error(ex)
+        (folder / 'error.json').write_text(json.dumps({'error': err_msg}))
+        raise ValueError(err_msg)
+    if not (folder/'result.json').is_file():
         raise ValueError('YouTube import could not run. Check yt-dlp, Node.js, FFmpeg and your connection in System Health.')
     return json.loads((folder/'result.json').read_text(encoding='utf-8'))
 

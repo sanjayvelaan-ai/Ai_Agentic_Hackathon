@@ -1,16 +1,25 @@
+import os
 import sys
 import urllib.parse
 from pathlib import Path
 
-# Ensure app package is importable
-current_dir = Path(__file__).resolve().parent
-parent_dir = current_dir.parent
+# Ensure remixora-ai is in python path
+parent_dir = Path(__file__).resolve().parent.parent
 if str(parent_dir) not in sys.path:
     sys.path.insert(0, str(parent_dir))
 
-from app.main import app as _fastapi_app
+if "PYTHONPATH" in os.environ:
+    if str(parent_dir) not in os.environ["PYTHONPATH"]:
+        os.environ["PYTHONPATH"] = str(parent_dir) + os.pathsep + os.environ["PYTHONPATH"]
+else:
+    os.environ["PYTHONPATH"] = str(parent_dir)
+
+from app.db import init_db
+from app.main import app as _fastapi_app, worker
 from app.media import ensure_ffmpeg
 
+init_db()
+worker.start()
 ensure_ffmpeg()
 
 
@@ -27,6 +36,3 @@ async def app(scope, receive, send):
         elif scope.get("path") in {"/api/index.py", "/api/index"}:
             scope["path"] = "/"
     await _fastapi_app(scope, receive, send)
-
-
-

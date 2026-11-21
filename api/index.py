@@ -1,3 +1,4 @@
+import os
 import sys
 import urllib.parse
 from pathlib import Path
@@ -7,9 +8,20 @@ root = Path(__file__).resolve().parent.parent / "remixora-ai"
 if str(root) not in sys.path:
     sys.path.insert(0, str(root))
 
-from app.main import app as _fastapi_app
+# Set PYTHONPATH environment variable so all child processes and tools find app
+if "PYTHONPATH" in os.environ:
+    if str(root) not in os.environ["PYTHONPATH"]:
+        os.environ["PYTHONPATH"] = str(root) + os.pathsep + os.environ["PYTHONPATH"]
+else:
+    os.environ["PYTHONPATH"] = str(root)
+
+from app.db import init_db
+from app.main import app as _fastapi_app, worker
 from app.media import ensure_ffmpeg
 
+# Explicitly initialize database and ensure worker is started
+init_db()
+worker.start()
 ensure_ffmpeg()
 
 
@@ -26,7 +38,3 @@ async def app(scope, receive, send):
         elif scope.get("path") in {"/api/index.py", "/api/index"}:
             scope["path"] = "/"
     await _fastapi_app(scope, receive, send)
-
-
-
-
