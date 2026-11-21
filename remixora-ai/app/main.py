@@ -221,10 +221,20 @@ async def unexpected_error(request,ex):
 def health():
     with db() as c:c.execute('SELECT 1')
     return {'status':'ok','worker_alive':bool(worker.thread and worker.thread.is_alive())}
+@app.get('/debug')
+def debug_endpoint(request: Request):
+    return {
+        "url": str(request.url),
+        "path": request.url.path,
+        "scope_path": request.scope.get("path"),
+        "headers": dict(request.headers)
+    }
+
 @app.get('/')
 @app.get('/api/index')
 @app.get('/api/index.py')
 def home():return FileResponse(STATIC/'index.html')
+
 app.mount('/static',StaticFiles(directory=STATIC),name='static')
 
 

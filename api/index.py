@@ -1,4 +1,5 @@
 import sys
+import urllib.parse
 from pathlib import Path
 
 # Ensure remixora-ai is in python path
@@ -11,16 +12,14 @@ from app.main import app as _fastapi_app
 async def app(scope, receive, send):
     if scope.get("type") == "http":
         headers = dict(scope.get("headers", []))
-        for header_key in [b"x-matched-path", b"x-forwarded-uri", b"x-original-url"]:
-            if header_key in headers:
-                orig = headers[header_key].decode("utf-8")
-                if orig:
-                    scope["path"] = orig
-                    break
-        path = scope.get("path", "")
-        if path.startswith("/api/index.py"):
-            scope["path"] = path[len("/api/index.py"):] or "/"
-        elif path.startswith("/api/index"):
-            scope["path"] = path[len("/api/index"):] or "/"
+        if b"x-now-route-matches" in headers:
+            raw_matches = headers[b"x-now-route-matches"].decode("utf-8")
+            parts = dict(p.split("=", 1) for p in raw_matches.split("&") if "=" in p)
+            if "1" in parts:
+                matched = urllib.parse.unquote(parts["1"])
+                scope["path"] = "/" + matched.lstrip("/")
+        elif scope.get("path") in {"/api/index.py", "/api/index"}:
+            scope["path"] = "/"
     await _fastapi_app(scope, receive, send)
+
 
