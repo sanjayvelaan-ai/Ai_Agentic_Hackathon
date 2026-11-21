@@ -7,3 +7,5 @@ tzdata>=2025.1
 yt-dlp[default]>=2024.10.26
 python-dotenv>=1,<2
 numpy>=2,<3
+static-ffmpeg>=3.0
+

@@ -51,9 +51,12 @@ def import_youtube(req:YouTubeRequest):
     if not req.rights_confirmed:raise HTTPException(400,'Confirm that you own or have permission to repurpose this video.')
     url=canonical_youtube_url(req.url)
     if not importlib.util.find_spec('yt_dlp'):raise HTTPException(503,'Install yt-dlp[default] on the server to enable YouTube imports.')
+    from .media import ensure_ffmpeg
+    ensure_ffmpeg()
     if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):raise HTTPException(503,'FFmpeg and FFprobe are required on the server.')
     if shutil.disk_usage(DATA_DIR).free<int(os.getenv('MAX_UPLOAD_MB','150'))*1024**2*4:raise HTTPException(507,'Free disk space before importing a video.')
     return create_workflow(WorkflowOptions(**req.model_dump()),url=url)
+
 
 @router.post('/assets/{asset_id}/workflow',status_code=202)
 def arrange_upload(asset_id:str,req:WorkflowOptions):return create_workflow(req,asset_id=asset_id)

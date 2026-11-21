@@ -9,6 +9,10 @@ if str(parent_dir) not in sys.path:
     sys.path.insert(0, str(parent_dir))
 
 from app.main import app as _fastapi_app
+from app.media import ensure_ffmpeg
+
+ensure_ffmpeg()
+
 
 async def app(scope, receive, send):
     if scope.get("type") == "http":

@@ -240,11 +240,14 @@ app.mount('/static',StaticFiles(directory=STATIC),name='static')
 
 @app.get('/api/status')
 def status():
+    from .media import ensure_ffmpeg
+    ensure_ffmpeg()
     with db() as c:
         counts={t:c.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0] for t in ['assets','clips','copies','calendar','metrics']}
         rev={r['name']:r['value'] for r in c.execute('SELECT * FROM revisions')}
     usage=directory_size(DATA_DIR)
     return {'providers':provider_status(),'transcription_backend':os.getenv('TRANSCRIPTION_BACKEND','none'),'max_upload_mb':int(os.getenv('MAX_UPLOAD_MB','150')),'max_duration_seconds':int(os.getenv('MAX_DURATION_SECONDS','1800')),'mode':'single-user','counts':counts,'revisions':rev,'ffmpeg':bool(shutil.which('ffmpeg')),'ffprobe':bool(shutil.which('ffprobe')),'storage_bytes':usage,'free_bytes':shutil.disk_usage(DATA_DIR).free,'worker_alive':bool(worker.thread and worker.thread.is_alive()),'authentication':bool(os.getenv('AUTH_USER') and os.getenv('AUTH_PASSWORD')),'agents':[{'name':n,'tools':t} for n,t in ROLES]}
+
 
 def directory_size(folder):
     """SQLite WAL/SHM and atomic render files may disappear during inspection."""

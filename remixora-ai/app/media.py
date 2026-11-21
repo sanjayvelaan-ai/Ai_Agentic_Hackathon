@@ -1,12 +1,90 @@
 """Source-aligned transcription, heuristic candidate selection, and safe FFmpeg rendering."""
+import gzip
 import json
+import math
 import os
 import re
+import shutil
+import stat
 import subprocess
-import math
+import threading
+import urllib.request
 from pathlib import Path
 
+_ffmpeg_checked = False
+_ffmpeg_lock = threading.Lock()
+
+def ensure_ffmpeg():
+    global _ffmpeg_checked
+    if _ffmpeg_checked and shutil.which("ffmpeg") and shutil.which("ffprobe"):
+        return True
+
+    with _ffmpeg_lock:
+        if shutil.which("ffmpeg") and shutil.which("ffprobe"):
+            _ffmpeg_checked = True
+            return True
+
+        # 1. Check local tools folder (e.g. .tools/ffmpeg/**/bin)
+        repo_root = Path(__file__).resolve().parent.parent
+        for p in repo_root.glob(".tools/ffmpeg/**/bin"):
+            if (p / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")).exists():
+                if str(p) not in os.environ.get("PATH", ""):
+                    os.environ["PATH"] = str(p) + os.pathsep + os.environ.get("PATH", "")
+                if shutil.which("ffmpeg") and shutil.which("ffprobe"):
+                    _ffmpeg_checked = True
+                    return True
+
+        # 2. Check /tmp/bin
+        tmp_bin = Path("/tmp/bin") if os.name != "nt" else Path(os.environ.get("TEMP", "/tmp")) / "bin"
+        tmp_bin.mkdir(parents=True, exist_ok=True)
+        if str(tmp_bin) not in os.environ.get("PATH", ""):
+            os.environ["PATH"] = str(tmp_bin) + os.pathsep + os.environ.get("PATH", "")
+
+        ffmpeg_bin = tmp_bin / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
+        ffprobe_bin = tmp_bin / ("ffprobe.exe" if os.name == "nt" else "ffprobe")
+
+        if ffmpeg_bin.exists() and ffprobe_bin.exists():
+            _ffmpeg_checked = True
+            return True
+
+        # 3. Try static_ffmpeg package if installed
+        try:
+            import static_ffmpeg
+            download_dir = str(tmp_bin)
+            static_ffmpeg.add_paths(download_dir=download_dir)
+            if shutil.which("ffmpeg") and shutil.which("ffprobe"):
+                _ffmpeg_checked = True
+                return True
+        except Exception:
+            pass
+
+        # 4. On Linux (e.g. Vercel serverless / AWS Lambda): download static standalone binaries
+        if os.name != "nt":
+            base_url = "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0"
+            for name, binary_path in [("ffmpeg", ffmpeg_bin), ("ffprobe", ffprobe_bin)]:
+                if not binary_path.exists() or binary_path.stat().st_size < 1000:
+                    url = f"{base_url}/{name}-linux-x64.gz"
+                    temp_gz = tmp_bin / f"{name}.gz"
+                    try:
+                        urllib.request.urlretrieve(url, temp_gz)
+                        with gzip.open(temp_gz, "rb") as f_in, open(binary_path, "wb") as f_out:
+                            shutil.copyfileobj(f_in, f_out)
+                        temp_gz.unlink(missing_ok=True)
+                        binary_path.chmod(binary_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+                    except Exception as ex:
+                        print(f"Failed downloading {name}: {ex}")
+
+            if shutil.which("ffmpeg") and shutil.which("ffprobe"):
+                _ffmpeg_checked = True
+                return True
+
+    return bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
+
+# Trigger background check on module load
+threading.Thread(target=ensure_ffmpeg, daemon=True).start()
+
 TIME_RE = re.compile(r"(?:(\d+):)?(\d+):(\d+)[,.](\d+)")
+
 
 
 def time_seconds(value):
