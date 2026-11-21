@@ -243,6 +243,10 @@ def status():
     from .media import ensure_ffmpeg
     ensure_ffmpeg()
     with db() as c:
+        has_queued = c.execute("SELECT 1 FROM jobs WHERE status='queued'").fetchone()
+    if has_queued:
+        worker.step()
+    with db() as c:
         counts={t:c.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0] for t in ['assets','clips','copies','calendar','metrics']}
         rev={r['name']:r['value'] for r in c.execute('SELECT * FROM revisions')}
     usage=directory_size(DATA_DIR)

@@ -47,7 +47,11 @@ def create_workflow(options,asset_id=None,url=None):
         c.execute("INSERT INTO jobs(id,kind,target_id,payload) VALUES (?,'workflow',?,'{}')",(job_id,workflow_id))
     from .main import worker
     worker.start()
-    threading.Thread(target=worker.step, daemon=True).start()
+    worker.step()
+    with db() as c:
+        updated = c.execute('SELECT * FROM workflows WHERE id=?', (workflow_id,)).fetchone()
+        if updated:
+            return {'id': workflow_id, 'asset_id': updated['asset_id'], 'stage': updated['stage'], 'job_id': job_id}
     return {'id':workflow_id,'asset_id':asset_id,'stage':'queued','job_id':job_id}
 
 @router.post('/youtube',status_code=202)
@@ -70,7 +74,10 @@ def arrange_upload(asset_id:str,req:WorkflowOptions):return create_workflow(req,
 def workflows():
     from .main import worker
     worker.start()
-    threading.Thread(target=worker.step, daemon=True).start()
+    with db() as c:
+        has_queued = c.execute("SELECT 1 FROM jobs WHERE status='queued'").fetchone()
+    if has_queued:
+        worker.step()
     with db() as c:return rows(c.execute('SELECT workflows.*,assets.filename,assets.transcript_source FROM workflows LEFT JOIN assets ON assets.id=workflows.asset_id ORDER BY workflows.rowid DESC LIMIT 50'))
 
 @router.post('/workflows/{workflow_id}/replan',status_code=202)
@@ -106,7 +113,11 @@ def resume_workflow(workflow_id:str):
         c.execute("INSERT INTO jobs(id,kind,target_id,payload) VALUES (?,'workflow',?,'{}')",(job_id,workflow_id))
     from .main import worker
     worker.start()
-    threading.Thread(target=worker.step, daemon=True).start()
+    worker.step()
+    with db() as c:
+        updated = c.execute('SELECT * FROM workflows WHERE id=?', (workflow_id,)).fetchone()
+        if updated:
+            return {'id': workflow_id, 'job_id': job_id, 'stage': updated['stage']}
     return {'id':workflow_id,'job_id':job_id,'stage':'queued'}
 
 @router.get('/capabilities')
