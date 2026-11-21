@@ -37,33 +37,10 @@ def set_stage(workflow_id,stage,progress,message):
 def create_workflow(options,asset_id=None,url=None):
     with db() as c:
         c.execute('BEGIN IMMEDIATE')
-        if url:
-            old=c.execute('SELECT * FROM workflows WHERE source_url=? ORDER BY rowid DESC LIMIT 1',(url,)).fetchone()
-        elif asset_id:
-            old=c.execute('SELECT * FROM workflows WHERE asset_id=? ORDER BY rowid DESC LIMIT 1',(asset_id,)).fetchone()
-        else:
-            old=None
+        old=c.execute('SELECT * FROM workflows WHERE asset_id=? OR (source_url=? AND source_url IS NOT NULL) ORDER BY rowid DESC LIMIT 1',(asset_id,url)).fetchone()
         if old:
-            if old['stage'] == 'complete' and old['asset_id']:
-                asset = c.execute('SELECT * FROM assets WHERE id=?', (old['asset_id'],)).fetchone()
-                clips = rows(c.execute('SELECT * FROM clips WHERE asset_id=?', (old['asset_id'],))) if old['asset_id'] else []
-                if clips:
-                    clip_ids = [clip['id'] for clip in clips]
-                    q = f"SELECT * FROM copies WHERE clip_id IN ({','.join('?' for _ in clip_ids)})"
-                    copies = rows(c.execute(q, clip_ids)) if clip_ids else []
-                    return {
-                        'id': old['id'],
-                        'asset_id': old['asset_id'],
-                        'stage': 'complete',
-                        'progress': 100,
-                        'message': 'Source ready',
-                        'existing': True,
-                        'job_id': None,
-                        'workflow': dict(old),
-                        'asset': dict(asset) if asset else None,
-                        'clips': clips,
-                        'copies': copies
-                    }
+            if old['stage']=='complete':
+                return {'id':old['id'],'asset_id':old['asset_id'],'stage':old['stage'],'existing':True}
             workflow_id=old['id']
             c.execute("UPDATE workflows SET stage='queued',message='Queued to process',error=NULL WHERE id=?",(workflow_id,))
             job_id=uuid.uuid4().hex
@@ -79,27 +56,9 @@ def create_workflow(options,asset_id=None,url=None):
     worker.start()
     worker.step()
     with db() as c:
-        updated = c.execute('SELECT workflows.*,assets.filename,assets.transcript_source FROM workflows LEFT JOIN assets ON assets.id=workflows.asset_id WHERE workflows.id=?', (workflow_id,)).fetchone()
+        updated = c.execute('SELECT * FROM workflows WHERE id=?', (workflow_id,)).fetchone()
         if updated:
-            asset = c.execute('SELECT * FROM assets WHERE id=?', (updated['asset_id'],)).fetchone() if updated['asset_id'] else None
-            clips = rows(c.execute('SELECT * FROM clips WHERE asset_id=?', (updated['asset_id'],))) if updated['asset_id'] else []
-            clip_ids = [clip['id'] for clip in clips]
-            copies = []
-            if clip_ids:
-                q = f"SELECT * FROM copies WHERE clip_id IN ({','.join('?' for _ in clip_ids)})"
-                copies = rows(c.execute(q, clip_ids))
-            return {
-                'id': workflow_id,
-                'asset_id': updated['asset_id'],
-                'stage': updated['stage'],
-                'progress': updated['progress'],
-                'message': updated['message'],
-                'job_id': job_id,
-                'workflow': dict(updated),
-                'asset': dict(asset) if asset else None,
-                'clips': clips,
-                'copies': copies
-            }
+            return {'id': workflow_id, 'asset_id': updated['asset_id'], 'stage': updated['stage'], 'job_id': job_id}
     return {'id':workflow_id,'asset_id':asset_id,'stage':'queued','job_id':job_id}
 
 @router.post('/youtube',status_code=202)
@@ -127,6 +86,71 @@ def workflows():
     if has_queued:
         worker.step()
     with db() as c:return rows(c.execute('SELECT workflows.*,assets.filename,assets.transcript_source FROM workflows LEFT JOIN assets ON assets.id=workflows.asset_id ORDER BY workflows.rowid DESC LIMIT 50'))
+
+@router.delete('/workflows/{workflow_id}')
+def delete_workflow(workflow_id: str):
+    with db() as c:
+        flow = c.execute("SELECT * FROM workflows WHERE id = ?", (workflow_id,)).fetchone()
+        if not flow:
+            raise HTTPException(404, "Workflow not found")
+        asset_id = flow['asset_id']
+        c.execute("DELETE FROM jobs WHERE target_id = ?", (workflow_id,))
+        c.execute("DELETE FROM workflows WHERE id = ?", (workflow_id,))
+        if asset_id:
+            c.execute("DELETE FROM copies WHERE clip_id IN (SELECT id FROM clips WHERE asset_id = ?)", (asset_id,))
+            c.execute("DELETE FROM variants WHERE clip_id IN (SELECT id FROM clips WHERE asset_id = ?)", (asset_id,))
+            c.execute("DELETE FROM clips WHERE asset_id = ?", (asset_id,))
+            c.execute("DELETE FROM media_sources WHERE project_id = ?", (asset_id,))
+            c.execute("DELETE FROM clip_candidates WHERE project_id = ?", (asset_id,))
+            c.execute("DELETE FROM rendered_clips WHERE project_id = ?", (asset_id,))
+            c.execute("DELETE FROM preset_candidates WHERE run_id IN (SELECT id FROM preset_runs WHERE project_id = ?)", (asset_id,))
+            c.execute("DELETE FROM preset_runs WHERE project_id = ?", (asset_id,))
+            c.execute("DELETE FROM segments WHERE asset_id = ?", (asset_id,))
+            c.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
+            c.execute("DELETE FROM projects WHERE id = ?", (asset_id,))
+    return {"deleted": True, "id": workflow_id}
+
+@router.post('/clean-dummy')
+def clean_dummy(query: str = "Free AI Video Generator"):
+    with db() as c:
+        q = f"%{query}%"
+        flows = c.execute("SELECT * FROM workflows WHERE filename LIKE ? OR asset_id IN (SELECT id FROM assets WHERE filename LIKE ?)", (q, q)).fetchall()
+        projects = c.execute("SELECT * FROM projects WHERE title LIKE ?", (q,)).fetchall()
+        deleted = []
+        for flow in flows:
+            wid = flow['id']
+            aid = flow['asset_id']
+            c.execute("DELETE FROM jobs WHERE target_id = ?", (wid,))
+            c.execute("DELETE FROM workflows WHERE id = ?", (wid,))
+            if aid:
+                c.execute("DELETE FROM copies WHERE clip_id IN (SELECT id FROM clips WHERE asset_id = ?)", (aid,))
+                c.execute("DELETE FROM variants WHERE clip_id IN (SELECT id FROM clips WHERE asset_id = ?)", (aid,))
+                c.execute("DELETE FROM clips WHERE asset_id = ?", (aid,))
+                c.execute("DELETE FROM media_sources WHERE project_id = ?", (aid,))
+                c.execute("DELETE FROM clip_candidates WHERE project_id = ?", (aid,))
+                c.execute("DELETE FROM rendered_clips WHERE project_id = ?", (aid,))
+                c.execute("DELETE FROM preset_candidates WHERE run_id IN (SELECT id FROM preset_runs WHERE project_id = ?)", (aid,))
+                c.execute("DELETE FROM preset_runs WHERE project_id = ?", (aid,))
+                c.execute("DELETE FROM segments WHERE asset_id = ?", (aid,))
+                c.execute("DELETE FROM assets WHERE id = ?", (aid,))
+                c.execute("DELETE FROM projects WHERE id = ?", (aid,))
+            deleted.append(wid)
+        for proj in projects:
+            pid = proj['id']
+            c.execute("DELETE FROM copies WHERE clip_id IN (SELECT id FROM clips WHERE asset_id = ?)", (pid,))
+            c.execute("DELETE FROM variants WHERE clip_id IN (SELECT id FROM clips WHERE asset_id = ?)", (pid,))
+            c.execute("DELETE FROM clips WHERE asset_id = ?", (pid,))
+            c.execute("DELETE FROM workflows WHERE asset_id = ? OR project_id = ?", (pid, pid))
+            c.execute("DELETE FROM media_sources WHERE project_id = ?", (pid,))
+            c.execute("DELETE FROM clip_candidates WHERE project_id = ?", (pid,))
+            c.execute("DELETE FROM rendered_clips WHERE project_id = ?", (pid,))
+            c.execute("DELETE FROM preset_candidates WHERE run_id IN (SELECT id FROM preset_runs WHERE project_id = ?)", (pid,))
+            c.execute("DELETE FROM preset_runs WHERE project_id = ?", (pid,))
+            c.execute("DELETE FROM segments WHERE asset_id = ?", (pid,))
+            c.execute("DELETE FROM assets WHERE id = ?", (pid,))
+            c.execute("DELETE FROM projects WHERE id = ?", (pid,))
+            deleted.append(pid)
+    return {"deleted": deleted}
 
 @router.post('/workflows/{workflow_id}/replan',status_code=202)
 def replan_workflow(workflow_id:str):
@@ -195,26 +219,15 @@ def run_workflow(job):
             result=download_youtube(flow['source_url'],folder,options.language)
             incoming=Path(result['path']).resolve()
             if not incoming.is_relative_to(Path(folder).resolve()) or not incoming.is_file():raise ValueError('Downloader returned an invalid media path')
-            if flow.get('source_url'):
-                digest = hashlib.sha256(flow['source_url'].encode('utf-8')).hexdigest()
-            else:
-                with incoming.open('rb') as fp:digest=hashlib.file_digest(fp,'sha256').hexdigest()
-            with db() as c:
-                duplicate=c.execute('SELECT id FROM assets WHERE (source_url IS NOT NULL AND source_url=?) OR checksum=?',(flow.get('source_url'),digest)).fetchone()
+            with incoming.open('rb') as fp:digest=hashlib.file_digest(fp,'sha256').hexdigest()
+            with db() as c:duplicate=c.execute('SELECT id FROM assets WHERE checksum=?',(digest,)).fetchone()
             asset_id=duplicate['id'] if duplicate else uuid.uuid4().hex
-            duration,kind=probe(incoming);dest=main.UPLOADS/(asset_id+incoming.suffix)
-            segments=result.get('segments',[])
-            if segments:main.validate_segments(segments,duration)
-            incoming.replace(dest)
-            with db() as c:
-                if duplicate:
-                    c.execute('UPDATE assets SET filename=?,media_path=?,media_kind=?,duration=?,status=?,checksum=?,source_url=?,transcript_source=? WHERE id=?',(result['title'],str(dest),kind,duration,'ready' if segments else 'queued',digest,flow['source_url'],result['transcript_source'],asset_id))
-                    c.execute('UPDATE projects SET title=?,status=?,duration=? WHERE id=?',(result['title'],'ready' if segments else 'queued',duration,asset_id))
-                    c.execute('UPDATE media_sources SET original_name=?,storage_path=?,duration=?,media_type=?,status=? WHERE id=?',(result['title'],str(dest),duration,kind,'ready' if segments else 'queued',asset_id))
-                    c.execute('DELETE FROM segments WHERE asset_id=?',(asset_id,))
-                    c.executemany('INSERT INTO segments(asset_id,start,end,text) VALUES (?,?,?,?)',[(asset_id,s['start'],s['end'],s['text']) for s in segments])
-                    c.execute('DELETE FROM clips WHERE asset_id=?',(asset_id,))
-                else:
+            if not duplicate:
+                duration,kind=probe(incoming);dest=main.UPLOADS/(asset_id+incoming.suffix)
+                segments=result.get('segments',[])
+                if segments:main.validate_segments(segments,duration)
+                incoming.replace(dest)
+                with db() as c:
                     c.execute('INSERT INTO assets(id,filename,media_path,media_kind,duration,status,checksum,source_url,transcript_source) VALUES (?,?,?,?,?,?,?,?,?)',(asset_id,result['title'],str(dest),kind,duration,'ready' if segments else 'queued',digest,flow['source_url'],result['transcript_source']))
                     c.execute('INSERT OR IGNORE INTO projects(id,title,thumbnail_path,status,source_type,duration) VALUES (?,?,?,?,?,?)', (asset_id, result['title'], None, 'ready' if segments else 'queued', 'youtube', duration))
                     c.execute('INSERT OR IGNORE INTO media_sources(id,project_id,source_type,original_name,source_url,storage_path,duration,media_type,status) VALUES (?,?,?,?,?,?,?,?,?)', (asset_id, asset_id, 'youtube', result['title'], flow['source_url'], str(dest), duration, kind, 'ready' if segments else 'queued'))
@@ -276,7 +289,8 @@ def run_workflow(job):
                 if not old:c.execute('INSERT INTO variants(id,clip_id,angle,headline,subtitles) VALUES (?,?,?,?,?)',(variant_id,clip['id'],treatment,headline,int(options.subtitles)))
             if not old or old['status']!='rendered':
                 try:main.process_job({'id':job['id'],'kind':'variant','target_id':variant_id},{})
-                except Exception as ex:
-                    with db() as c:c.execute("UPDATE variants SET status='failed',error='Workflow export skipped or failed. You can export cuts on demand.' WHERE id=?",(variant_id,))
+                except Exception:
+                    with db() as c:c.execute("UPDATE variants SET status='failed',error='Workflow export failed. Retry the project.' WHERE id=?",(variant_id,))
+                    raise
     set_stage(workflow_id,'complete',100,f'{len(clips)} moments arranged. Review your drafts and exports before publishing.')
     main.audit(asset_id,'Workflow Orchestrator','arrange_source',{'status':'complete','workflow_id':workflow_id,'clips':len(clips),'objective':options.objective,'rendered':options.auto_render})

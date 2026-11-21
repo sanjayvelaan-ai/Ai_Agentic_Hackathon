@@ -276,11 +276,19 @@ def update_project(project_id: str, update: ProjectUpdate):
 def delete_project(project_id: str):
     with db() as c:
         get_project_or_404(c, project_id)
-        c.execute("DELETE FROM projects WHERE id = ?", (project_id,))
-        c.execute("DELETE FROM assets WHERE id = ?", (project_id,))
-        c.execute("DELETE FROM segments WHERE asset_id = ?", (project_id,))
+        # Delete dependent children first to satisfy foreign key constraints
+        c.execute("DELETE FROM copies WHERE clip_id IN (SELECT id FROM clips WHERE asset_id = ?)", (project_id,))
+        c.execute("DELETE FROM variants WHERE clip_id IN (SELECT id FROM clips WHERE asset_id = ?)", (project_id,))
+        c.execute("DELETE FROM clips WHERE asset_id = ?", (project_id,))
+        c.execute("DELETE FROM workflows WHERE asset_id = ? OR project_id = ?", (project_id, project_id))
+        c.execute("DELETE FROM media_sources WHERE project_id = ?", (project_id,))
         c.execute("DELETE FROM clip_candidates WHERE project_id = ?", (project_id,))
         c.execute("DELETE FROM rendered_clips WHERE project_id = ?", (project_id,))
+        c.execute("DELETE FROM preset_candidates WHERE run_id IN (SELECT id FROM preset_runs WHERE project_id = ?)", (project_id,))
+        c.execute("DELETE FROM preset_runs WHERE project_id = ?", (project_id,))
+        c.execute("DELETE FROM segments WHERE asset_id = ?", (project_id,))
+        c.execute("DELETE FROM assets WHERE id = ?", (project_id,))
+        c.execute("DELETE FROM projects WHERE id = ?", (project_id,))
 
     # Safely remove isolated project directory
     p_path = project_paths(project_id)["root"]
