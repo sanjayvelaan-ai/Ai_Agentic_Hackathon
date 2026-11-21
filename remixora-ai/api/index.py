@@ -12,15 +12,17 @@ from app.main import app as _fastapi_app
 
 async def app(scope, receive, send):
     if scope.get("type") == "http":
-        headers = dict(scope.get("headers", []))
-        if b"x-now-route-matches" in headers:
-            raw_matches = headers[b"x-now-route-matches"].decode("utf-8")
-            parts = dict(p.split("=", 1) for p in raw_matches.split("&") if "=" in p)
-            if "1" in parts:
-                matched = urllib.parse.unquote(parts["1"])
-                scope["path"] = "/" + matched.lstrip("/")
+        query_string = scope.get("query_string", b"").decode("latin1")
+        if query_string:
+            params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
+            if "__path" in params and params["__path"]:
+                raw_path = params.pop("__path")[0]
+                scope["path"] = "/" + raw_path.lstrip("/")
+                new_query = urllib.parse.urlencode(params, doseq=True)
+                scope["query_string"] = new_query.encode("latin1")
         elif scope.get("path") in {"/api/index.py", "/api/index"}:
             scope["path"] = "/"
     await _fastapi_app(scope, receive, send)
+
 
 
