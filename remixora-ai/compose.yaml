@@ -1,0 +1,36 @@
+services:
+  remixora:
+    build:
+      context: .
+      args:
+        WITH_WHISPER: ${WITH_WHISPER:-0}
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/data
+    init: true
+    pids_limit: 160
+    mem_limit: 8g
+    cpus: 2.0
+    security_opt:
+      - no-new-privileges:true
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["public"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - remixora
+volumes:
+  caddy_data:
+  caddy_config:

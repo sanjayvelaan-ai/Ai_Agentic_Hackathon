@@ -1,0 +1,15 @@
+{$DOMAIN} {
+    encode zstd gzip
+    request_body {
+        max_size 152MB
+    }
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "same-origin"
+    }
+    log {
+        output stdout
+    }
+    reverse_proxy remixora:8000
+}

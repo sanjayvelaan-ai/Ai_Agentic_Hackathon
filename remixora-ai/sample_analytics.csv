@@ -1,0 +1,4 @@
+clip_id,platform,angle,impressions,views,likes,comments,shares,saves,period,source
+REPLACE_WITH_FIRST_CLIP_ID,instagram,Teach It,1000,700,75,12,9,18,lifetime,synthetic
+REPLACE_WITH_SECOND_CLIP_ID,instagram,Teach It,1100,750,88,14,12,16,lifetime,synthetic
+REPLACE_WITH_THIRD_CLIP_ID,instagram,Teach It,950,650,71,10,8,14,lifetime,synthetic

@@ -1,0 +1,277 @@
+/* ============================================================
+   REMIXORA AI — Liquid Metal Button System
+   Vanilla CSS/JS implementation (no React, no npm)
+   ============================================================ */
+
+/* ── Base button reset ─────────────────────────────────── */
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    box-shadow var(--dur-base) var(--ease-out),
+    background var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+  outline-offset: 3px;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--purple);
+}
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ── Sizes ─────────────────────────────────────────────── */
+.btn-xs  { height: 28px; padding: 0 var(--space-3); font-size: var(--text-xs); border-radius: var(--radius-xs); gap: var(--space-1); }
+.btn-sm  { height: 36px; padding: 0 var(--space-4); font-size: var(--text-sm); }
+.btn-md  { height: 44px; padding: 0 var(--space-5); font-size: var(--text-base); }
+.btn-lg  { height: 52px; padding: 0 var(--space-6); font-size: var(--text-md); border-radius: var(--radius-md); }
+.btn-icon-sm  { width: 36px; height: 36px; padding: 0; border-radius: var(--radius-sm); }
+.btn-icon-md  { width: 44px; height: 44px; padding: 0; border-radius: var(--radius-md); }
+
+/* ── Primary: Liquid Metal ─────────────────────────────── */
+.btn-primary {
+  background: var(--metal-primary);
+  color: var(--text-inverse);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: var(--metal-glow), var(--shadow-sm);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--metal-hover);
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: var(--metal-glow), var(--shadow-md);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.99);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Shimmer overlay on primary */
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.18) 50%, transparent 70%);
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease-out);
+  pointer-events: none;
+  transform: translateX(-100%);
+}
+
+.btn-primary:hover::before {
+  opacity: 1;
+  animation: shimmer 0.9s var(--ease-out) forwards;
+}
+
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+/* ── Secondary ─────────────────────────────────────────── */
+.btn-secondary {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--surface-overlay);
+  border-color: var(--purple-dim);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── Ghost ─────────────────────────────────────────────── */
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--purple-bg);
+  color: var(--purple-bright);
+  border-color: var(--border);
+}
+
+/* ── Teal / success ────────────────────────────────────── */
+.btn-teal {
+  background: var(--teal-bg);
+  color: var(--teal);
+  border: 1px solid rgba(145,214,193,0.25);
+}
+
+.btn-teal:hover:not(:disabled) {
+  background: rgba(145,214,193,0.15);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(145,214,193,0.15);
+}
+
+/* ── Danger ────────────────────────────────────────────── */
+.btn-danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid rgba(255,155,159,0.25);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: rgba(255,155,159,0.15);
+  transform: translateY(-1px);
+}
+
+/* ── Loading state ─────────────────────────────────────── */
+.btn-loading {
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+.btn-loading .btn-label {
+  opacity: 0;
+}
+
+.btn-loading::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* Legacy .button class — mapped to new system */
+.button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 40px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform var(--dur-base) var(--ease-spring),
+              background var(--dur-base) var(--ease-out),
+              box-shadow var(--dur-base) var(--ease-out),
+              border-color var(--dur-base) var(--ease-out);
+  outline-offset: 3px;
+}
+
+.button:focus-visible { outline: 2px solid var(--purple); }
+.button:disabled      { opacity: 0.45; cursor: not-allowed; }
+
+.button:hover:not(:disabled) {
+  background: var(--surface-overlay);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.button.primary {
+  background: var(--metal-primary);
+  color: var(--text-inverse);
+  border-color: transparent;
+  box-shadow: var(--shadow-purple), var(--shadow-sm);
+}
+
+.button.primary:hover:not(:disabled) {
+  background: var(--metal-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-purple), var(--shadow-md);
+}
+
+.button.small {
+  height: 32px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+
+.button.ghost:hover:not(:disabled) {
+  background: var(--purple-bg);
+  color: var(--purple);
+  border-color: var(--border);
+  transform: translateY(-1px);
+}
+
+.button.teal-button {
+  background: var(--teal-bg);
+  color: var(--teal);
+  border-color: rgba(145,214,193,0.2);
+}
+
+.button.teal-button:hover:not(:disabled) {
+  background: rgba(145,214,193,0.14);
+  transform: translateY(-1px);
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--dur-base) var(--ease-out),
+              color var(--dur-base) var(--ease-out),
+              border-color var(--dur-base) var(--ease-out);
+}
+
+.icon-button:hover {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.icon-button:focus-visible {
+  outline: 2px solid var(--purple);
+  outline-offset: 2px;
+}

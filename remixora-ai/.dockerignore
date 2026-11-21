@@ -1,0 +1,16 @@
+.git
+.env
+.env.local
+.models
+backups
+data
+__pycache__
+.pytest_cache
+*.zip
+.tools
+.venv
+demo
+logs
+test-results
+.local-auth.json
+*.pid
