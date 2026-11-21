@@ -32,24 +32,31 @@ def generate_json(instruction, content):
         except Exception:pass
         return value,provider
     key=os.getenv('GEMINI_API_KEY','')
-    if key and mode in {'auto','gemini'} and os.getenv('GEMINI_MODEL'):
-        model=os.environ['GEMINI_MODEL']
-        # Server-side requests only. A free-eligible model must be verified in the user's account.
-        url=f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
+    if key and mode in {'auto','gemini'}:
+        preferred=os.getenv('GEMINI_MODEL','gemini-1.5-flash')
+        candidates_models=[preferred]
+        for fb in ['gemini-1.5-flash','gemini-2.0-flash','gemini-2.5-flash']:
+            if fb not in candidates_models:
+                candidates_models.append(fb)
         body={'contents':[{'parts':[{'text':payload}]}],'generationConfig':{'responseMimeType':'application/json','temperature':0.35,'maxOutputTokens':8192}}
-        for attempt in range(2):
-            try:
-                with httpx.Client(timeout=90) as client:
-                    response=client.post(url,headers={'x-goog-api-key':key},json=body)
-                    if response.status_code == 429 or response.status_code>=500:
-                        if attempt==0:
-                            time.sleep(min(float(response.headers.get('retry-after','2')),3));continue
-                        break
-                    response.raise_for_status()
-                    raw=''.join(part.get('text','') for part in response.json()['candidates'][0]['content']['parts'] if not part.get('thought'))
-                    return save(json.loads(raw), 'gemini')
-            except (httpx.HTTPError,ValueError,KeyError,IndexError):
-                break
+        for model in candidates_models:
+            url=f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
+            success=False
+            for attempt in range(2):
+                try:
+                    with httpx.Client(timeout=90) as client:
+                        response=client.post(url,headers={'x-goog-api-key':key},json=body)
+                        if response.status_code == 429 or response.status_code>=500:
+                            if attempt==0:
+                                time.sleep(min(float(response.headers.get('retry-after','2')),3));continue
+                            break
+                        if response.status_code == 404:
+                            break
+                        response.raise_for_status()
+                        raw=''.join(part.get('text','') for part in response.json()['candidates'][0]['content']['parts'] if not part.get('thought'))
+                        return save(json.loads(raw), 'gemini')
+                except (httpx.HTTPError,ValueError,KeyError,IndexError):
+                    break
     url=os.getenv('OLLAMA_URL','')
     model=os.getenv('OLLAMA_MODEL','')
     if url and model and mode in {'auto','ollama','gemini'}:

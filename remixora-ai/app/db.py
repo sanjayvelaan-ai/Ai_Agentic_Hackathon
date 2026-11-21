@@ -4,8 +4,17 @@ import sqlite3
 from contextlib import contextmanager, closing
 from pathlib import Path
 
-DATA_DIR = Path(os.getenv("DATA_DIR", "./data")).resolve()
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+_target_dir = os.getenv("DATA_DIR")
+if _target_dir:
+    DATA_DIR = Path(_target_dir).resolve()
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+else:
+    try:
+        DATA_DIR = Path("./data").resolve()
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        DATA_DIR = Path("/tmp/data").resolve()
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_FILE = DATA_DIR / "remixora.sqlite3"
 
 # Structured project storage root

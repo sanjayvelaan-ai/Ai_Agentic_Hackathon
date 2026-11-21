@@ -98,7 +98,7 @@ def resume_workflow(workflow_id:str):
 @router.get('/capabilities')
 def capabilities():
     mode=os.getenv('AI_PROVIDER','none')
-    gemini=bool(os.getenv('GEMINI_API_KEY') and os.getenv('GEMINI_MODEL'))
+    gemini=bool(os.getenv('GEMINI_API_KEY') and os.getenv('GEMINI_MODEL','gemini-1.5-flash'))
     ollama=bool(os.getenv('OLLAMA_URL') and os.getenv('OLLAMA_MODEL'))
     enabled=(gemini and mode in {'auto','gemini'}) or (ollama and mode in {'auto','ollama','gemini'})
     return {'youtube_installed':bool(importlib.util.find_spec('yt_dlp')),'javascript_runtime':bool(shutil.which('node')),
