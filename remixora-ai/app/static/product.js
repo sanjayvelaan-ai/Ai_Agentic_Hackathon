@@ -37,8 +37,13 @@ function libraryHome(){
 
 window.createStudio = function(){
   const flow = (state.workflows||[]).find(f => f.id === workflowId);
-  if (flow && !['complete','failed'].includes(flow.stage)) {
-    return cleanWorkspace(flow);
+  if (flow) {
+    if (typeof workflowWorkspace === 'function') {
+      return workflowWorkspace(flow);
+    }
+    if (!['complete','failed'].includes(flow.stage)) {
+      return cleanWorkspace(flow);
+    }
   }
   return pageHead('Import Source', 'Upload video/audio recordings or paste YouTube links to create a new project.') + `
   <section class="panel import-panel section-gap">
@@ -140,8 +145,12 @@ function bindProductForms(){
       });
       selectWorkflow(r.id);
       toast('YouTube video imported. AI agents are analyzing moments & platform drafts…');
-      location.hash = '#home';
-      await route();
+      if (location.hash === '#ingest') {
+        await route();
+      } else {
+        location.hash = 'ingest';
+        await route();
+      }
     } else {
       const file = data.get('media');
       if (!file || !file.size) throw Error('Please select a media file to upload.');

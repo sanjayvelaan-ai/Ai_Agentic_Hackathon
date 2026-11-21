@@ -193,7 +193,9 @@ def run(url, folder, language):
         if thumb_url:
             try:
                 dest_thumb = folder / 'thumb.jpg'
-                urllib.request.urlretrieve(thumb_url, dest_thumb)
+                req = urllib.request.Request(thumb_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    dest_thumb.write_bytes(resp.read())
             except Exception:
                 dest_thumb = None
 
