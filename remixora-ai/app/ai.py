@@ -33,9 +33,9 @@ def generate_json(instruction, content):
         return value,provider
     key=os.getenv('GEMINI_API_KEY','')
     if key and mode in {'auto','gemini'}:
-        preferred=os.getenv('GEMINI_MODEL','gemini-1.5-flash')
+        preferred=os.getenv('GEMINI_MODEL','gemini-flash-lite-latest')
         candidates_models=[preferred]
-        for fb in ['gemini-1.5-flash','gemini-2.0-flash','gemini-2.5-flash']:
+        for fb in ['gemini-flash-lite-latest','gemini-3.8-flash','gemini-flash-latest']:
             if fb not in candidates_models:
                 candidates_models.append(fb)
         body={'contents':[{'parts':[{'text':payload}]}],'generationConfig':{'responseMimeType':'application/json','temperature':0.35,'maxOutputTokens':8192}}
@@ -44,7 +44,7 @@ def generate_json(instruction, content):
             success=False
             for attempt in range(2):
                 try:
-                    with httpx.Client(timeout=90) as client:
+                    with httpx.Client(timeout=30) as client:
                         response=client.post(url,headers={'x-goog-api-key':key},json=body)
                         if response.status_code == 429 or response.status_code>=500:
                             if attempt==0:

@@ -10,6 +10,7 @@ from urllib.parse import urlsplit,parse_qs
 def canonical_youtube_url(value):
     try:
         value=value.strip()
+        if value.startswith('http://'):value='https://'+value[7:]
         if value.startswith(('youtube.com/','www.youtube.com/','m.youtube.com/','youtu.be/','www.youtu.be/')):value='https://'+value
         url=urlsplit(value)
         if url.scheme!='https' or url.username or url.password or url.port not in {None,443}:raise ValueError()

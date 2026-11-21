@@ -131,11 +131,16 @@ function bindProductForms(){
       const r = await api('/youtube', 'POST', {
         url: data.get('url'),
         rights_confirmed: data.has('rights'),
-        import_only: true,
-        auto_render: false
+        import_only: false,
+        auto_render: true,
+        clip_count: 3,
+        objective: 'shorts',
+        target_seconds: 30,
+        subtitles: true
       });
       selectWorkflow(r.id);
-      toast('YouTube source import queued. Creating project…');
+      toast('YouTube video imported. AI agents are analyzing moments & platform drafts…');
+      location.hash = '#home';
       await route();
     } else {
       const file = data.get('media');
