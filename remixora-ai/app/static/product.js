@@ -137,20 +137,36 @@ function bindProductForms(){
         url: data.get('url'),
         rights_confirmed: data.has('rights'),
         import_only: false,
-        auto_render: true,
+        auto_render: false,
         clip_count: 3,
         objective: 'shorts',
         target_seconds: 30,
         subtitles: true
       });
-      selectWorkflow(r.id);
-      toast('YouTube video imported. AI agents are analyzing moments & platform drafts…');
-      if (location.hash === '#ingest') {
-        await route();
-      } else {
-        location.hash = 'ingest';
-        await route();
+      if (r.workflow) {
+        state.workflows = [r.workflow, ...(state.workflows || []).filter(w => w.id !== r.workflow.id)];
       }
+      if (r.asset) {
+        state.assets = [r.asset, ...(state.assets || []).filter(a => a.id !== r.asset.id)];
+        sourceId = r.asset.id;
+        localStorage.setItem('remixora-source', sourceId);
+      }
+      if (r.clips && r.clips.length) {
+        const cids = new Set(r.clips.map(c => c.id));
+        state.clips = [...r.clips, ...(state.clips || []).filter(c => !cids.has(c.id))];
+        clipId = r.clips[0].id;
+        localStorage.setItem('remixora-clip', clipId);
+      }
+      if (r.copies && r.copies.length) {
+        const copyIds = new Set(r.copies.map(c => c.id));
+        state.copies = [...r.copies, ...(state.copies || []).filter(c => !copyIds.has(c.id))];
+      }
+      if (typeof saveLocalCache === 'function') saveLocalCache();
+      selectWorkflow(r.id);
+      toast('YouTube video imported! AI agents discovered key moments & platform drafts.');
+      location.hash = 'ingest';
+      await route(false);
+      if (typeof syncWithServer === 'function') syncWithServer();
     } else {
       const file = data.get('media');
       if (!file || !file.size) throw Error('Please select a media file to upload.');

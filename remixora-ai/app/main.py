@@ -346,7 +346,9 @@ def source_media(asset_id:str):
 @app.get('/api/assets/{asset_id}/transcript')
 def transcript(asset_id:str):
     with db() as c:
-        get(c,'assets',asset_id)
+        row = c.execute('SELECT 1 FROM assets WHERE id=?', (asset_id,)).fetchone()
+        if not row:
+            return []
         return rows(c.execute('SELECT id,start,end,text FROM segments WHERE asset_id=? ORDER BY start',(asset_id,)))
 
 def save_segments(asset_id,segments):
@@ -672,6 +674,36 @@ def export_data():
     for clip in data['clips']:clip.pop('output_path',None)
     for candidate in data['preset_candidates']:candidate.pop('output_path',None)
     return Response(json.dumps(data,indent=2),media_type='application/json',headers={'Content-Disposition':'attachment; filename="remixora-studio.json"'})
+
+@app.post('/api/sync')
+async def sync_client_state(request: Request):
+    try:
+        data = await request.json()
+    except Exception:
+        return {'status': 'ignored'}
+    with db() as c:
+        for a in data.get('assets', []):
+            keys = [k for k in a if k in {'id','filename','media_path','media_kind','duration','status','checksum','source_url','transcript_source'}]
+            if keys:
+                c.execute(f"INSERT OR REPLACE INTO assets({','.join(keys)}) VALUES ({','.join('?' for _ in keys)})", [a[k] for k in keys])
+                c.execute("INSERT OR IGNORE INTO projects(id,title,status,source_type,duration) VALUES (?,?,?,?,?)", (a['id'], a['filename'], a.get('status','ready'), 'youtube', a.get('duration', 0)))
+        for w in data.get('workflows', []):
+            keys = [k for k in w if k in {'id','asset_id','project_id','source_url','options','stage','progress','message','error'}]
+            if keys:
+                c.execute(f"INSERT OR REPLACE INTO workflows({','.join(keys)}) VALUES ({','.join('?' for _ in keys)})", [w[k] for k in keys])
+        for clip in data.get('clips', []):
+            keys = [k for k in clip if k in {'id','asset_id','start','end','title','reason','quote','score','source','suggested_angle','rubric','base_score','adjustment','performance_revision','evidence'}]
+            if keys:
+                c.execute(f"INSERT OR REPLACE INTO clips({','.join(keys)}) VALUES ({','.join('?' for _ in keys)})", [clip[k] for k in keys])
+        for copy in data.get('copies', []):
+            keys = [k for k in copy if k in {'id','clip_id','platform','angle','content','source','rules_used','brand_revision','approved'}]
+            if keys:
+                c.execute(f"INSERT OR REPLACE INTO copies({','.join(keys)}) VALUES ({','.join('?' for _ in keys)})", [copy[k] for k in keys])
+        for seg in data.get('segments', []):
+            keys = [k for k in seg if k in {'id','asset_id','start','end','text'}]
+            if keys:
+                c.execute(f"INSERT OR REPLACE INTO segments({','.join(keys)}) VALUES ({','.join('?' for _ in keys)})", [seg[k] for k in keys])
+    return {'status': 'synced'}
 
 from .workflow import router as workflow_router
 app.include_router(workflow_router)

@@ -12,7 +12,66 @@ const size=n=>n>1024**3?`${(n/1024**3).toFixed(1)} GB`:`${(n/1024**2).toFixed(1)
 function badge(text){const cls=/ready|approved|rendered|complete/.test(text)?'green':/failed/.test(text)?'red':/pending|required|queued|running|rendering/.test(text)?'amber':'subtle';return `<span class="pill ${cls}">${esc(text.replaceAll('_',' '))}</span>`}
 function toast(message,error=false){clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').className='toast'+(error?' error':'');$('#toast').hidden=false;toastTimer=setTimeout(()=>$('#toast').hidden=true,error?8500:4500)}
 async function api(path,method='GET',body){const options={method};if(body instanceof FormData)options.body=body;else if(body!==undefined){options.headers={'Content-Type':'application/json'};options.body=JSON.stringify(body)}const res=await fetch('/api'+path,options);let data;try{data=await res.json()}catch{data={detail:'The server returned an unreadable response'}}if(!res.ok)throw Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail));return data}
-async function load(){const keys=['status','assets','clips','copies','variants','brand-rules','calendar','insights','jobs','events','profile','workflows','capabilities','presets','preset-runs'];const values=await Promise.all(keys.map(k=>api('/'+k)));keys.forEach((k,i)=>state[k]=values[i]);if(!state.assets.some(a=>a.id===sourceId))sourceId=state.assets[0]?.id||'';if(!state.clips.some(c=>c.id===clipId))clipId=state.clips[0]?.id||''}
+const CACHE_KEYS=['workflows','assets','clips','copies','variants','brand-rules','calendar','insights'];
+function saveLocalCache(){
+  try{
+    const p={};
+    for(const k of CACHE_KEYS){if(state[k]&&state[k].length)p[k]=state[k];}
+    localStorage.setItem('remixora_app_cache',JSON.stringify(p));
+  }catch(e){}
+}
+function restoreLocalCache(){
+  try{
+    const raw=localStorage.getItem('remixora_app_cache');
+    if(!raw)return;
+    const c=JSON.parse(raw);
+    for(const k of CACHE_KEYS){
+      if(c[k]&&Array.isArray(c[k])&&c[k].length){
+        if(!state[k]||!state[k].length){
+          state[k]=c[k];
+        }else{
+          const existingIds=new Set(state[k].map(x=>x.id));
+          for(const item of c[k]){if(!existingIds.has(item.id))state[k].push(item);}
+        }
+      }
+    }
+  }catch(e){}
+}
+async function syncWithServer(){
+  try{
+    const payload={
+      assets:state.assets||[],
+      workflows:state.workflows||[],
+      clips:state.clips||[],
+      copies:state.copies||[]
+    };
+    if(payload.assets.length||payload.workflows.length){
+      await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    }
+  }catch(e){}
+}
+async function load(){
+  restoreLocalCache();
+  const keys=['status','assets','clips','copies','variants','brand-rules','calendar','insights','jobs','events','profile','workflows','capabilities','presets','preset-runs'];
+  try{
+    const values=await Promise.all(keys.map(k=>api('/'+k)));
+    keys.forEach((k,i)=>{
+      const val=values[i];
+      if(Array.isArray(val)){
+        if(val.length>0){
+          state[k]=val;
+        }else if(!state[k]||!state[k].length){
+          state[k]=[];
+        }
+      }else{
+        state[k]=val;
+      }
+    });
+    saveLocalCache();
+  }catch(e){}
+  if(!state.assets?.some(a=>a.id===sourceId))sourceId=state.assets?.[0]?.id||'';
+  if(!state.clips?.some(c=>c.id===clipId))clipId=state.clips?.[0]?.id||'';
+}
 function pageHead(title,subtitle,action=''){return `<div class="page-head"><div><h1>${title}</h1><p>${subtitle}</p></div>${action}</div>`}
 function empty(title,text,href,label,ico='film'){return `<div class="empty"><div class="empty-icon">${icon(ico)}</div><h3>${title}</h3><p>${text}</p>${href?`<a class="button primary small" href="${href}">${label}</a>`:''}</div>`}
 function sourceOptions(){return `<select id="source-select" class="source-select" aria-label="Selected source">${state.assets.map(a=>`<option value="${a.id}" ${a.id===sourceId?'selected':''}>${esc(a.filename)}</option>`).join('')}</select>`}
@@ -58,6 +117,9 @@ if (typeof window !== 'undefined') {
   window.size = size;
   window.pageHead = pageHead;
   window.empty = empty;
+  window.saveLocalCache = saveLocalCache;
+  window.restoreLocalCache = restoreLocalCache;
+  window.syncWithServer = syncWithServer;
 }
 async function route(reload=true){const token=++routeToken;const current=location.hash.slice(1)||'projects';let html='';$('#sidebar').classList.remove('open');try{if(reload)await load();if(current.startsWith('projects/')){const parts=current.split('/');const pid=parts[1];const tab=parts[2]||'overview';$('#navigation').innerHTML=nav.map(([id,label,i])=>`<a href="#${id}" class="${id==='projects'?'active':''}" ${id==='projects'?'aria-current="page"':''}>${icon(i)}${label}</a>`).join('');$('#breadcrumb').textContent='Project Workspace';html=await projectWorkspaceView(pid,tab);}else{const view=views[current]?current:'projects';$('#navigation').innerHTML=nav.map(([id,label,i])=>`<a href="#${id}" class="${view===id?'active':''}" ${view===id?'aria-current="page"':''}>${icon(i)}${label}</a>`).join('');$('#breadcrumb').textContent=(nav.find(n=>n[0]===view)||['projects','My Projects'])[1];html=await views[view]();}if(token!==routeToken)return;$('#main').innerHTML=html;bindForms();}catch(e){if(token===routeToken)$('#main').innerHTML=pageHead('The studio needs a moment.','Your saved work is still in the local database.')+`<div class="notice error">${esc(e.message)}</div><button class="button primary section-gap" data-action="refresh">Try again</button>`}}
 function modal(title,body){$('#dialog-title').textContent=title;$('#dialog-body').innerHTML=body;$('#dialog').showModal();bindForms()}

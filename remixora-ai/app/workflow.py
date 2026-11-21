@@ -44,6 +44,26 @@ def create_workflow(options,asset_id=None,url=None):
         else:
             old=None
         if old:
+            if old['stage'] == 'complete' and old['asset_id']:
+                asset = c.execute('SELECT * FROM assets WHERE id=?', (old['asset_id'],)).fetchone()
+                clips = rows(c.execute('SELECT * FROM clips WHERE asset_id=?', (old['asset_id'],))) if old['asset_id'] else []
+                if clips:
+                    clip_ids = [clip['id'] for clip in clips]
+                    q = f"SELECT * FROM copies WHERE clip_id IN ({','.join('?' for _ in clip_ids)})"
+                    copies = rows(c.execute(q, clip_ids)) if clip_ids else []
+                    return {
+                        'id': old['id'],
+                        'asset_id': old['asset_id'],
+                        'stage': 'complete',
+                        'progress': 100,
+                        'message': 'Source ready',
+                        'existing': True,
+                        'job_id': None,
+                        'workflow': dict(old),
+                        'asset': dict(asset) if asset else None,
+                        'clips': clips,
+                        'copies': copies
+                    }
             workflow_id=old['id']
             c.execute("UPDATE workflows SET stage='queued',message='Queued to process',error=NULL WHERE id=?",(workflow_id,))
             job_id=uuid.uuid4().hex
@@ -59,9 +79,27 @@ def create_workflow(options,asset_id=None,url=None):
     worker.start()
     worker.step()
     with db() as c:
-        updated = c.execute('SELECT * FROM workflows WHERE id=?', (workflow_id,)).fetchone()
+        updated = c.execute('SELECT workflows.*,assets.filename,assets.transcript_source FROM workflows LEFT JOIN assets ON assets.id=workflows.asset_id WHERE workflows.id=?', (workflow_id,)).fetchone()
         if updated:
-            return {'id': workflow_id, 'asset_id': updated['asset_id'], 'stage': updated['stage'], 'job_id': job_id}
+            asset = c.execute('SELECT * FROM assets WHERE id=?', (updated['asset_id'],)).fetchone() if updated['asset_id'] else None
+            clips = rows(c.execute('SELECT * FROM clips WHERE asset_id=?', (updated['asset_id'],))) if updated['asset_id'] else []
+            clip_ids = [clip['id'] for clip in clips]
+            copies = []
+            if clip_ids:
+                q = f"SELECT * FROM copies WHERE clip_id IN ({','.join('?' for _ in clip_ids)})"
+                copies = rows(c.execute(q, clip_ids))
+            return {
+                'id': workflow_id,
+                'asset_id': updated['asset_id'],
+                'stage': updated['stage'],
+                'progress': updated['progress'],
+                'message': updated['message'],
+                'job_id': job_id,
+                'workflow': dict(updated),
+                'asset': dict(asset) if asset else None,
+                'clips': clips,
+                'copies': copies
+            }
     return {'id':workflow_id,'asset_id':asset_id,'stage':'queued','job_id':job_id}
 
 @router.post('/youtube',status_code=202)
@@ -238,8 +276,7 @@ def run_workflow(job):
                 if not old:c.execute('INSERT INTO variants(id,clip_id,angle,headline,subtitles) VALUES (?,?,?,?,?)',(variant_id,clip['id'],treatment,headline,int(options.subtitles)))
             if not old or old['status']!='rendered':
                 try:main.process_job({'id':job['id'],'kind':'variant','target_id':variant_id},{})
-                except Exception:
-                    with db() as c:c.execute("UPDATE variants SET status='failed',error='Workflow export failed. Retry the project.' WHERE id=?",(variant_id,))
-                    raise
+                except Exception as ex:
+                    with db() as c:c.execute("UPDATE variants SET status='failed',error='Workflow export skipped or failed. You can export cuts on demand.' WHERE id=?",(variant_id,))
     set_stage(workflow_id,'complete',100,f'{len(clips)} moments arranged. Review your drafts and exports before publishing.')
     main.audit(asset_id,'Workflow Orchestrator','arrange_source',{'status':'complete','workflow_id':workflow_id,'clips':len(clips),'objective':options.objective,'rendered':options.auto_render})
