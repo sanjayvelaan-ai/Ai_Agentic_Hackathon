@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import uuid
 from pathlib import Path
 from typing import Literal
