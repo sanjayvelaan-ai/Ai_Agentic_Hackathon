@@ -222,8 +222,11 @@ def health():
     with db() as c:c.execute('SELECT 1')
     return {'status':'ok','worker_alive':bool(worker.thread and worker.thread.is_alive())}
 @app.get('/')
+@app.get('/api/index')
+@app.get('/api/index.py')
 def home():return FileResponse(STATIC/'index.html')
 app.mount('/static',StaticFiles(directory=STATIC),name='static')
+
 
 @app.get('/api/status')
 def status():
